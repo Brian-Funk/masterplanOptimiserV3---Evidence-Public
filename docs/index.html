@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Masterplan Optimiser evidence archive format and verification documentation.">
+    <title>Masterplan Optimiser Evidence</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header>
+      <p class="eyebrow">Masterplan Optimiser V3</p>
+      <h1>Accountability evidence</h1>
+      <p class="lede">A public description of the portable evidence format, its verification model, and its limits.</p>
+    </header>
+    <main>
+      <section>
+        <h2>What this repository is</h2>
+        <p>This repository contains the reviewed public template and offline verification tools for deterministic evidence bundles. It does not contain a deployment's evidence records.</p>
+      </section>
+      <section>
+        <h2>Evidence model</h2>
+        <ol>
+          <li>Each deployment maintains its own controller identity and local signed, hash-chained ledger.</li>
+          <li>A portable bundle carries the declared trust state, signed chain, deterministic summaries, and an offline verifier.</li>
+          <li>Git may preserve an additional reviewed copy, but it is not the authoritative evidence store.</li>
+        </ol>
+      </section>
+      <section>
+        <h2>Repository controls</h2>
+        <p>Changes require pull requests and Code Owner review. Evidence ingestion may add only one new bundle directory containing <code>evidence.bundle</code> and <code>bundle.sha256</code>. Automated checks verify the complete chain and reject mixed or unexpected ingestion paths.</p>
+      </section>
+      <section>
+        <h2>Interpretation boundary</h2>
+        <p>A valid signature proves that the identified key signed the exact statement. It does not prove physical deletion, absence of copies outside controlled systems, or legal compliance.</p>
+      </section>
+      <nav aria-label="Documentation links">
+        <a href="verification.html">Verification guide</a>
+        <a href="https://github.com/Brian-Funk/masterplanOptimiserV3---Evidence-Public">Source repository</a>
+      </nav>
+    </main>
+    <footer>Public documentation only. Do not publish protected deployment data here.</footer>
+  </body>
+</html>
