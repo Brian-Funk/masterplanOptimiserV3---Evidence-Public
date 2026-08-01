@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify a closed, bundle-only private Evidence archive repository."""
+"""Verify a closed-schema Evidence archive or public template repository."""
 
 from __future__ import annotations
 
@@ -21,9 +21,13 @@ ARCHIVE_PATH_RE = re.compile(
     r"(evidence\.bundle|bundle\.sha256)$"
 )
 STATIC_FILES = {
+    ".github/workflows/pages.yml",
     ".github/workflows/verify-evidence.yml",
     "CODEOWNERS",
     "README.md",
+    "docs/index.html",
+    "docs/styles.css",
+    "docs/verification.html",
     "instances/README.md",
     "tools/evidence_archive_repository.py",
     "tools/evidence_git.py",

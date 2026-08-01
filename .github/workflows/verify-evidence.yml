@@ -32,8 +32,21 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+      - name: Detect evidence-ingestion changes
+        id: ingestion
+        shell: bash
+        run: |
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -q '^instances/'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Require exactly one new bundle and digest directory
+        if: steps.ingestion.outputs.changed == 'true'
         run: >-
           python tools/validate_ingestion_paths.py .
           --base "${{ github.event.pull_request.base.sha }}"
           --head "${{ github.event.pull_request.head.sha }}"
+      - name: Confirm reviewed maintenance change
+        if: steps.ingestion.outputs.changed != 'true'
+        run: echo "No instance evidence path changed; Code Owner review governs this maintenance pull request."

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="How to verify a Masterplan Optimiser evidence repository.">
+    <title>Verification guide | Masterplan Optimiser Evidence</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header>
+      <p class="eyebrow">Operator guide</p>
+      <h1>Verify an evidence repository</h1>
+      <p class="lede">Run the verifier from a trusted checkout and review both the cryptographic result and the declared trust boundaries.</p>
+    </header>
+    <main>
+      <section>
+        <h2>Repository verification</h2>
+        <pre><code>python tools/verify_evidence_repo.py .</code></pre>
+        <p>The verifier checks portable bundle digests, identities, signatures, chain continuity, and deterministic contents.</p>
+      </section>
+      <section>
+        <h2>Expected ingestion layout</h2>
+        <pre><code>instances/&lt;instance_id&gt;/bundles/&lt;bundle_id&gt;/
+  evidence.bundle
+  bundle.sha256</code></pre>
+        <p>An ingestion pull request must add exactly these two files in one new bundle directory. Maintenance changes are separately controlled through Code Owner review.</p>
+      </section>
+      <section>
+        <h2>Do not include</h2>
+        <p>Never add databases, backups, private keys, secrets, names, personal email addresses, task content, or schedules to a public repository.</p>
+      </section>
+      <nav aria-label="Documentation links">
+        <a href="index.html">Overview</a>
+        <a href="https://github.com/Brian-Funk/masterplanOptimiserV3---Evidence-Public/blob/main/README.md">Repository workflow</a>
+      </nav>
+    </main>
+    <footer>Verification establishes integrity within the declared trust model. It does not establish deletion outside controlled systems.</footer>
+  </body>
+</html>
