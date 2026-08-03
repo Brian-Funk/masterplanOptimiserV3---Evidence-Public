@@ -20,7 +20,7 @@ async function main() {
   const manifest = await verifier.verifyBundle(bundle, (label) => checks.push(label));
   assert.equal(manifest.record_count, 1);
   assert.equal(manifest.instance_id, "11111111-1111-4111-8111-111111111111");
-  assert.equal(checks.length, 5);
+  assert.equal(checks.length, 3);
 
   const tampered = raw.slice();
   const marker = Buffer.from(receipt, "utf8");

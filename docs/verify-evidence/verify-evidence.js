@@ -4,9 +4,11 @@ const MAX_ZIP_BYTES = 258 * 1024 * 1024;
 const ZIP_NAMES = ["accountability.evidence", "accountability.evidence.sha256", "VERIFYING.txt"];
 const BUNDLE_ROOT = new Set(["bundle.json", "bundle.sha256", "VERIFYING.md"]);
 const BUNDLE_FORMAT = "mp-opt-portable-evidence-bundle-v1";
+const LOCAL_BUNDLE_FORMAT = "mp-opt-evidence-bundle-v1";
 const RECORD_FORMAT = "mp-opt-evidence-record-v1";
 const SSH_NAMESPACE = "mp-opt-evidence-v1";
 const UUID_NAMESPACE = "8c36ce0a-ec6a-4b9b-981e-dfb7f891da70";
+const LOCAL_UUID_NAMESPACE = "aa0c67fb-6a9c-4cf3-b712-c4cde822e7be";
 const LIMIT_TEXT = "A valid signature proves that the identified key signed the exact statement shown. It does not prove physical deletion, absence of copies outside controlled systems, physical-world truth, or legal compliance.";
 const textDecoder = new TextDecoder("utf-8", { fatal: true });
 const asciiDecoder = new TextDecoder("ascii", { fatal: true });
@@ -205,12 +207,57 @@ async function uuidV5(namespace, name) {
   return formatUuid(value);
 }
 
+async function verifyLocalBundle(tar, manifestRaw, manifest, addCheck) {
+  exactKeys(manifest, ["format", "bundle_id", "created_at", "instance_id", "chain_id", "chain_head_sha256", "record_count", "files"], "The local bundle manifest");
+  if (!canonicalUuid(manifest.bundle_id) || !canonicalUuid(manifest.instance_id) || !canonicalUuid(manifest.chain_id) || !Array.isArray(manifest.files) || manifest.files.length === 0) fail("The local bundle manifest identity or schema is invalid.");
+  const payload = new Map(); const declared = new Set();
+  for (const row of manifest.files) {
+    exactKeys(row, ["path", "sha256", "size"], "A local bundle file row");
+    if (typeof row.path !== "string" || !safePath(row.path) || !["ledger", "public", "anchors"].includes(row.path.split("/", 1)[0]) || declared.has(row.path)) fail("A local bundle file path is unsafe or duplicated.");
+    const raw = tar.get(`evidence/${row.path}`);
+    if (!raw || raw.length !== row.size || await sha256(raw) !== row.sha256) fail(`The declared evidence file ${row.path} does not match its digest.`);
+    payload.set(row.path, raw); declared.add(row.path);
+  }
+  const carried = [...tar.keys()].filter((name) => name !== "bundle.json").map((name) => name.replace(/^evidence\//, ""));
+  if (carried.length !== declared.size || carried.some((name) => !declared.has(name))) fail("The local bundle contains undeclared evidence files.");
+  addCheck(`Canonical local bundle manifest and all ${declared.size} declared files`);
+  const publicRaw = payload.get("public/instance_signing_key.pub");
+  if (!publicRaw) fail("The local bundle has no instance verification key.");
+  const publicKey = parsePublicKey(asciiDecoder.decode(publicRaw));
+  const expectedKeyId = await keyId(publicKey);
+  const recordPattern = /^ledger\/([0-9]{12})_([0-9a-f-]{36})\.json$/;
+  const records = [...payload.entries()].filter(([name]) => recordPattern.test(name)).sort(([left], [right]) => left.localeCompare(right));
+  if (records.length === 0 || records.length !== manifest.record_count) fail("The local signed record count does not match its manifest.");
+  let previous = "GENESIS"; let head = null;
+  for (let index = 0; index < records.length; index += 1) {
+    const [name, raw] = records[index]; const match = name.match(recordPattern); const record = parseCanonicalJson(raw, `record ${index + 1}`);
+    exactKeys(record, ["format", "instance_id", "chain_id", "sequence", "record_id", "record_type", "created_at", "signer", "previous_record_sha256", "management_audit_tail_sha256", "payload"], `Record ${index + 1}`);
+    if (record.format !== RECORD_FORMAT || record.sequence !== index + 1 || !canonicalUuid(record.record_id) || match[1] !== String(index + 1).padStart(12, "0") || match[2] !== record.record_id || record.instance_id !== manifest.instance_id || record.chain_id !== manifest.chain_id || record.previous_record_sha256 !== previous || record.signer?.key_id !== expectedKeyId || record.signer?.role !== "instance") fail(`Record ${index + 1} breaks the local signed chain.`);
+    const signature = payload.get(`${name}.sig`);
+    if (!signature) fail(`Record ${index + 1} has no signature.`);
+    await verifySshSignature(raw, asciiDecoder.decode(signature), publicKey.canonical);
+    head = await sha256(raw); previous = head;
+  }
+  if (head !== manifest.chain_head_sha256) fail("The local signed-chain head does not match its manifest.");
+  addCheck(`All ${records.length} local record signatures and chain links`);
+  const rowsDigest = await sha256(textEncoder.encode(`${canonicalJson({ files: manifest.files })}\n`));
+  const identity = [manifest.instance_id, manifest.chain_id, manifest.chain_head_sha256, rowsDigest].join("|");
+  if (await uuidV5(LOCAL_UUID_NAMESPACE, identity) !== manifest.bundle_id) fail("The deterministic local bundle identity does not match its contents.");
+  addCheck("Deterministic local bundle identity and exact chain-head binding");
+  return manifest;
+}
+
 async function verifyBundle(bundleRaw, addCheck) {
   const tar = parseTar(bundleRaw);
-  for (const required of BUNDLE_ROOT) if (!tar.has(required)) fail(`The canonical bundle is missing ${required}.`);
-  for (const name of tar.keys()) if (!BUNDLE_ROOT.has(name) && !name.startsWith("payload/")) fail(`The canonical bundle contains unexpected member ${name}.`);
+  if (!tar.has("bundle.json")) fail("The canonical bundle is missing bundle.json.");
   const manifestRaw = tar.get("bundle.json");
   const manifest = parseCanonicalJson(manifestRaw, "bundle.json");
+  if (manifest.format === LOCAL_BUNDLE_FORMAT) {
+    for (const name of tar.keys()) if (name !== "bundle.json" && !name.startsWith("evidence/")) fail(`The local bundle contains unexpected member ${name}.`);
+    return verifyLocalBundle(tar, manifestRaw, manifest, addCheck);
+  }
+  for (const required of BUNDLE_ROOT) if (!tar.has(required)) fail(`The canonical bundle is missing ${required}.`);
+  for (const name of tar.keys()) if (!BUNDLE_ROOT.has(name) && !name.startsWith("payload/")) fail(`The canonical bundle contains unexpected member ${name}.`);
   exactKeys(manifest, ["format", "bundle_id", "created_at", "controller_id", "instance_id", "chain_id", "chain_head_sha256", "record_count", "instance_key_id", "processor_ids", "verification_limits", "files"], "The bundle manifest");
   if (manifest.format !== BUNDLE_FORMAT || manifest.verification_limits !== LIMIT_TEXT || !canonicalUuid(manifest.bundle_id) || !canonicalUuid(manifest.instance_id) || !canonicalUuid(manifest.chain_id)) fail("The bundle manifest identity or format is invalid.");
   if (textDecoder.decode(tar.get("bundle.sha256")) !== `${await sha256(manifestRaw)}  bundle.json\n`) fail("The bundle manifest checksum does not match.");

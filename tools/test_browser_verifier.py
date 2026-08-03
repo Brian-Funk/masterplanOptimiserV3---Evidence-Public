@@ -4,9 +4,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+import hashlib
+import json
+import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
+import uuid
+import zipfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +26,7 @@ import portable_bundle  # noqa: E402
 INSTANCE_ID = "11111111-1111-4111-8111-111111111111"
 CHAIN_ID = "22222222-2222-4222-8222-222222222222"
 CONTROLLER_ID = "ctl-controller000001"
+LOCAL_BUNDLE_NAMESPACE = uuid.UUID("aa0c67fb-6a9c-4cf3-b712-c4cde822e7be")
 
 
 def keypair(directory: Path, name: str) -> tuple[Path, Path]:
@@ -85,10 +92,49 @@ def fixture(directory: Path) -> Path:
     )
     for name in ("requests", "purges", "attestations", "backups", "anchors", "summaries"):
         (instance_root / name).mkdir()
+    home = directory / "local-evidence"
+    shutil.copytree(instance_root / "ledger", home / "ledger")
+    (home / "public").mkdir()
+    shutil.copyfile(instance_root / "trust" / "instance.pub", home / "public" / "instance_signing_key.pub")
+    (home / "anchors").mkdir()
+    payload = {
+        path.relative_to(home).as_posix(): path.read_bytes()
+        for root_name in ("anchors", "ledger", "public")
+        for path in sorted((home / root_name).rglob("*"))
+        if path.is_file()
+    }
+    rows = [
+        {"path": path, "sha256": hashlib.sha256(raw).hexdigest(), "size": len(raw)}
+        for path, raw in sorted(payload.items())
+    ]
+    chain = evidence_manifest.verify_chain(home / "ledger", home / "public" / "instance_signing_key.pub")
+    identity = "|".join((
+        chain["instance_id"], chain["chain_id"], chain["head_sha256"],
+        hashlib.sha256(evidence_git.canonical_json({"files": rows})).hexdigest(),
+    ))
+    latest = evidence_manifest.load_json_bytes(sorted((home / "ledger").glob("[0-9]" * 12 + "_*.json"))[-1].read_bytes())
+    document = {
+        "format": "mp-opt-evidence-bundle-v1",
+        "bundle_id": str(uuid.uuid5(LOCAL_BUNDLE_NAMESPACE, identity)),
+        "created_at": latest["created_at"],
+        "instance_id": chain["instance_id"],
+        "chain_id": chain["chain_id"],
+        "chain_head_sha256": chain["head_sha256"],
+        "record_count": chain["records"],
+        "files": rows,
+    }
     bundle = directory / "accountability.evidence"
+    with tarfile.open(bundle, "w", format=tarfile.GNU_FORMAT) as archive:
+        portable_bundle._add_bytes(archive, "bundle.json", evidence_git.canonical_json(document))
+        for path, raw in sorted(payload.items()):
+            portable_bundle._add_bytes(archive, f"evidence/{path}", raw)
+    bundle_raw = bundle.read_bytes()
+    bundle_sha256 = hashlib.sha256(bundle_raw).hexdigest()
     export_zip = directory / "accountability-evidence.zip"
-    portable_bundle.create_bundle(repository, INSTANCE_ID, bundle)
-    portable_bundle.create_evidence_zip(bundle, export_zip)
+    with zipfile.ZipFile(export_zip, "w", allowZip64=False) as archive:
+        archive.writestr(portable_bundle._zip_info("accountability.evidence"), bundle_raw)
+        archive.writestr(portable_bundle._zip_info("accountability.evidence.sha256"), f"{bundle_sha256}  accountability.evidence\n".encode("ascii"))
+        archive.writestr(portable_bundle._zip_info("VERIFYING.txt"), b"Synthetic local verifier fixture\n")
     return export_zip
 
 
