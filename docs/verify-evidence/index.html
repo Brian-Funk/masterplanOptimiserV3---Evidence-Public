@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex,nofollow,noarchive">
+    <meta name="description" content="Local verification of a Masterplan Optimiser accountability evidence ZIP.">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'">
+    <title>Local evidence verifier | Masterplan Optimiser</title>
+    <link rel="stylesheet" href="../styles.css">
+  </head>
+  <body>
+    <header>
+      <p class="eyebrow">Optional verification utility</p>
+      <h1>Verify evidence locally</h1>
+      <p class="lede">Select a complete accountability evidence ZIP. Verification runs in this browser tab; the file is not uploaded or sent to a server.</p>
+    </header>
+    <main>
+      <section class="verifier-panel" aria-labelledby="select-heading">
+        <h2 id="select-heading">Select the downloaded ZIP</h2>
+        <p>The expected ZIP contains exactly <code>accountability.evidence</code>, <code>accountability.evidence.sha256</code>, and <code>VERIFYING.txt</code>.</p>
+        <label class="file-picker">
+          <span>Evidence ZIP</span>
+          <input id="evidence-file" type="file" accept="application/zip,.zip">
+        </label>
+        <button id="verify-button" type="button" disabled>Verify selected file</button>
+        <p class="local-only">Local-only check: this page has no upload endpoint and its Content Security Policy blocks network connections.</p>
+      </section>
+      <section id="result" class="verification-result" aria-live="polite" aria-busy="false" hidden>
+        <h2 id="result-title">Verification result</h2>
+        <p id="result-summary"></p>
+        <dl id="result-details"></dl>
+        <ol id="result-checks"></ol>
+      </section>
+      <section>
+        <h2>What a valid result means</h2>
+        <p>A valid result establishes file integrity, declared trust signatures, and signed-chain continuity within the evidence package. It does not prove physical deletion, the absence of copies outside controlled systems, factual truth outside the signed statements, or legal compliance.</p>
+      </section>
+    </main>
+    <footer>Public verification code; selected files remain on the device.</footer>
+    <script src="verify-evidence.js"></script>
+  </body>
+</html>

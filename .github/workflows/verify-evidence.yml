@@ -19,8 +19,13 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
       - name: Verify every portable bundle, digest, identity and complete chain
         run: python tools/verify_evidence_repo.py .
+      - name: Verify the local browser verifier against signed synthetic evidence
+        run: python tools/test_browser_verifier.py
   ingestion-path-validation:
     name: Ingestion path validation
     if: github.event_name == 'pull_request'

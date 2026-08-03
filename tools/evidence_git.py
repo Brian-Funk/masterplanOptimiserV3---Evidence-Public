@@ -48,6 +48,8 @@ TOOL_FILES = {
     "tools/portable_bundle.py",
     "tools/verify_evidence_repo.py",
     "tools/scan_evidence_repo.py",
+    "tools/test_browser_verifier.js",
+    "tools/test_browser_verifier.py",
     "tools/validate_ingestion_paths.py",
     "tools/render_human_summary.py",
 }

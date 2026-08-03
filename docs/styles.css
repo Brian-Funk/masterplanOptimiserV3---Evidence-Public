@@ -52,7 +52,24 @@ pre { overflow-x: auto; padding: 16px; color: #f7f9ff; background: var(--ink); b
 nav { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
 a { color: var(--accent); font-weight: 650; }
 
+.verifier-panel { border-color: #bfdbfe; background: #eff6ff; }
+.file-picker { display: grid; gap: .45rem; margin: 1rem 0; font-weight: 700; }
+.file-picker input { width: 100%; padding: .8rem; border: 1px solid #94a3b8; border-radius: .6rem; background: #fff; font: inherit; font-weight: 400; }
+button { border: 0; border-radius: .6rem; padding: .75rem 1rem; background: #1d4ed8; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+button:disabled { cursor: wait; opacity: .55; }
+.local-only { margin-top: 1rem; color: #334155; font-size: .9rem; }
+.verification-result { border-width: 2px; }
+.verification-result.pending { border-color: #93c5fd; }
+.verification-result.valid { border-color: #86efac; background: #f0fdf4; }
+.verification-result.invalid { border-color: #fca5a5; background: #fef2f2; }
+.verification-result dl { display: grid; grid-template-columns: minmax(9rem, 1fr) 3fr; gap: .45rem 1rem; }
+.verification-result dt { font-weight: 700; }
+.verification-result dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .85rem; }
+.verification-result li { margin: .35rem 0; }
+
 @media (max-width: 520px) {
   header { padding-top: 48px; }
   section { padding: 20px; }
+  .verification-result dl { grid-template-columns: 1fr; }
+  .verification-result dd { margin-bottom: .5rem; }
 }
