@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Generate an encrypted Masterplan Optimiser Desktop processor key locally in this browser.">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self'; connect-src 'none'; font-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'">
+    <title>Processor key generator | Masterplan Optimiser Evidence</title>
+    <link rel="stylesheet" href="../styles.css">
+  </head>
+  <body>
+    <header>
+      <p class="eyebrow">Local processor custody</p>
+      <h1>Generate a Desktop processor key</h1>
+      <p class="lede">The key is generated and encrypted on this device. This page makes no network requests and stores nothing in the browser.</p>
+    </header>
+    <main>
+      <section class="verifier-panel">
+        <h2>Key details</h2>
+        <label class="file-picker">Optional display label<input id="display-label" maxlength="128" placeholder="Event operations workstation"></label>
+        <label class="file-picker">Existing key ID, only for rotation<input id="supersedes-key" pattern="ek-[0-9a-f]{16}" placeholder="ek-0123456789abcdef"></label>
+        <label class="file-picker">Passphrase<input id="passphrase" type="password" minlength="16" autocomplete="new-password"></label>
+        <label class="file-picker">Repeat passphrase<input id="passphrase-repeat" type="password" minlength="16" autocomplete="new-password"></label>
+        <button id="generate-button" type="button">Generate and verify key package</button>
+        <p class="local-only">Use at least 16 characters. A lost passphrase cannot be recovered. The private key must never be uploaded to a Server or evidence repository.</p>
+      </section>
+      <section id="result" class="verification-result pending" aria-live="polite">
+        <h2 id="result-title">No key generated</h2>
+        <p id="result-summary">Complete the form to create an encrypted key package and a separate public package.</p>
+        <dl id="result-details" hidden>
+          <dt>Processor</dt><dd id="result-entity"></dd>
+          <dt>Key</dt><dd id="result-key"></dd>
+          <dt>Fingerprint</dt><dd id="result-fingerprint"></dd>
+        </dl>
+        <div id="downloads" class="download-actions" hidden>
+          <button id="private-download" type="button">Download encrypted private key</button>
+          <button id="public-download" type="button">Download public package</button>
+        </div>
+      </section>
+      <section>
+        <h2>Next step</h2>
+        <p>Import the encrypted private-key file in Masterplan Desktop when linking the relevant event to its Server. Desktop will retain the private key in the operating-system credential store and transfer only public proof.</p>
+      </section>
+      <nav aria-label="Documentation links"><a href="../verification.html">Verification guide</a><a href="../index.html">Evidence overview</a></nav>
+    </main>
+    <footer>A signature proves that this key signed an exact statement. It does not prove physical deletion outside controlled systems.</footer>
+    <script src="processor-key.js"></script>
+  </body>
+</html>
