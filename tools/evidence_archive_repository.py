@@ -26,6 +26,8 @@ STATIC_FILES = {
     "CODEOWNERS",
     "README.md",
     "docs/index.html",
+    "docs/processor-key/index.html",
+    "docs/processor-key/processor-key.js",
     "docs/styles.css",
     "docs/verification.html",
     "docs/verify-evidence/index.html",
@@ -38,6 +40,7 @@ STATIC_FILES = {
     "tools/scan_evidence_repo.py",
     "tools/test_browser_verifier.js",
     "tools/test_browser_verifier.py",
+    "tools/test_processor_key_generator.js",
     "tools/validate_ingestion_paths.py",
     "tools/verify_evidence_repo.py",
 }
