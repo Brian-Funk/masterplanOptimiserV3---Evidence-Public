@@ -9,17 +9,17 @@ globalThis.atob = (value) => Buffer.from(value, "base64").toString("binary");
 const custody = require("../docs/controller-key/controller-key.js");
 
 async function main() {
-  const passphrase = "synthetic controller passphrase";
-  const generated = await custody.generateControllerKey({ controllerId: "ctl-synthetic0001", passphrase });
-  assert.equal(generated.privatePackage.format, "mp-opt-controller-private-key-v1");
+  const generated = await custody.generateControllerKey({ controllerId: "ctl-synthetic0001" });
+  assert.equal(generated.privatePackage.format, "mp-opt-controller-private-key-v2");
   assert.equal(generated.publicPackage.format, "mp-opt-controller-public-key-v1");
   assert.match(generated.publicPackage.key_id, /^ek-[0-9a-f]{16}$/);
-  assert.equal((await custody.loadControllerKey(generated.privatePackage, passphrase)).publicPackage.key_id, generated.publicPackage.key_id);
-  await assert.rejects(custody.loadControllerKey(generated.privatePackage, "wrong passphrase value"), /wrong or the encrypted key package was changed/);
+  assert.equal((await custody.loadControllerKey(generated.privatePackage)).publicPackage.key_id, generated.publicPackage.key_id);
+  assert.ok(generated.privatePackage.private_key_pkcs8);
+  assert.ok(!JSON.stringify(generated.privatePackage).match(/passphrase|PBKDF2|AES-GCM|ciphertext/i));
 
   const tampered = structuredClone(generated.privatePackage);
-  tampered.public_package.entity_id = "ctl-substitute01";
-  await assert.rejects(custody.loadControllerKey(tampered, passphrase), /wrong or the encrypted key package was changed/);
+  tampered.public_package.public_key_sha256 = "0".repeat(64);
+  await assert.rejects(custody.loadControllerKey(tampered), /does not match its public package/);
 
   const exactAction = {
     format: "mp-opt-trust-action-v1", action: "register",
@@ -39,7 +39,7 @@ async function main() {
     supersedes_key_id: null, reason: null,
     action_sha256: actionSha256, nonce: "synthetic", created_at: "2030-01-01T00:00:00Z", expires_at: "2030-01-01T00:10:00Z",
   };
-  const signed = await custody.signControllerDocument(generated.privatePackage, passphrase, document);
+  const signed = await custody.signControllerDocument(generated.privatePackage, document);
   assert.equal(signed.document, document);
   assert.equal(signed.proof.key_id, generated.publicPackage.key_id);
   assert.equal(signed.proof.namespace, "mp-opt-role-trust-v1");
@@ -50,13 +50,13 @@ async function main() {
   assert.equal(await crypto.subtle.verify({ name: "Ed25519" }, publicKey, Buffer.from(signed.proof.signature, "base64"), payload), true);
 
   const processorDocument = { ...document, role: "processor" };
-  await assert.rejects(custody.signControllerDocument(generated.privatePackage, passphrase, processorDocument), /not a controller action/);
+  await assert.rejects(custody.signControllerDocument(generated.privatePackage, processorDocument), /not a controller action/);
   const deletionDocument = { ...document, format: "mp-opt-desktop-deletion-receipt-v2" };
-  await assert.rejects(custody.signControllerDocument(generated.privatePackage, passphrase, deletionDocument), /cannot sign that document type/);
+  await assert.rejects(custody.signControllerDocument(generated.privatePackage, deletionDocument), /cannot sign that document type/);
   const substituted = { ...document, key_id: "ek-0000000000000000" };
-  await assert.rejects(custody.signControllerDocument(generated.privatePackage, passphrase, substituted), /different controller key/);
+  await assert.rejects(custody.signControllerDocument(generated.privatePackage, substituted), /different controller key/);
   const changedAction = { ...document, action_sha256: "a".repeat(64) };
-  await assert.rejects(custody.signControllerDocument(generated.privatePackage, passphrase, changedAction), /action digest is invalid/);
+  await assert.rejects(custody.signControllerDocument(generated.privatePackage, changedAction), /action digest is invalid/);
 }
 
 main().catch((error) => { console.error(error); process.exitCode = 1; });
