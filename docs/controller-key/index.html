@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Generate an encrypted Masterplan Optimiser controller key and sign controller trust documents locally in this browser.">
+    <meta name="description" content="Generate a local Masterplan Optimiser controller key and sign controller trust documents locally in this browser.">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self'; connect-src 'none'; font-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'">
     <title>Controller key custody | Masterplan Optimiser Evidence</title>
     <link rel="stylesheet" href="../styles.css">
@@ -12,29 +12,27 @@
     <header>
       <p class="eyebrow">Local controller custody</p>
       <h1>Controller key custody</h1>
-      <p class="lede">Generate an encrypted controller key or sign an exact Server challenge on this device. This page makes no network requests and stores nothing in the browser.</p>
+      <p class="lede">Generate a controller key or sign an exact Server challenge on this device. This page makes no network requests and stores nothing in the browser.</p>
     </header>
     <main>
       <section class="verifier-panel">
         <h2>1. Generate a controller key</h2>
-        <p>Do this once on a controller-controlled device. Download both files and preserve the encrypted private package separately from the public package.</p>
+        <p>Do this once on a controller-controlled device. Download both files, move the private file into a protected password-manager or offline store, and delete the downloaded copy.</p>
         <label class="file-picker">Opaque controller entity ID<input id="controller-id" maxlength="52" pattern="ctl-[a-z0-9]{8,48}" autocomplete="off"></label>
         <label class="file-picker">Existing key ID, only for rotation<input id="supersedes-key" pattern="ek-[0-9a-f]{16}" placeholder="ek-0123456789abcdef" autocomplete="off"></label>
-        <label class="file-picker">Passphrase<input id="generate-passphrase" type="password" minlength="16" autocomplete="new-password"></label>
-        <label class="file-picker">Repeat passphrase<input id="generate-passphrase-repeat" type="password" minlength="16" autocomplete="new-password"></label>
         <button id="generate-button" type="button">Generate and recovery-test key</button>
-        <p class="local-only">Use at least 16 characters. A lost passphrase cannot be recovered. Never upload the encrypted private package to a Server or evidence repository.</p>
+        <p class="local-only">The private file is not passphrase-encrypted. Never upload it to a Server or evidence repository. Store it in protected custody and delete transient downloads.</p>
       </section>
       <section id="generation-result" class="verification-result pending" aria-live="polite">
         <h2 id="generation-title">No key generated</h2>
-        <p id="generation-summary">Complete the form to create an encrypted private package and a separate public package.</p>
+        <p id="generation-summary">Complete the form to create a private key file and a separate public package.</p>
         <dl id="generation-details" hidden>
           <dt>Controller</dt><dd id="generation-entity"></dd>
           <dt>Key</dt><dd id="generation-key"></dd>
           <dt>Fingerprint</dt><dd id="generation-fingerprint"></dd>
         </dl>
         <div id="generation-downloads" class="download-actions" hidden>
-          <button id="private-download" type="button">Download encrypted private key</button>
+          <button id="private-download" type="button">Download private key</button>
           <button id="public-download" type="button">Download public package</button>
         </div>
       </section>
@@ -42,15 +40,14 @@
       <section class="verifier-panel">
         <h2>2. Sign an exact controller document</h2>
         <p>Download or copy the exact JSON challenge from the Server. This tool signs only the deployment-bound controller registration or rotation format that matches the selected key.</p>
-        <label class="file-picker">Encrypted controller-key package<input id="sign-private-file" type="file" accept="application/json,.json"></label>
+        <label class="file-picker">Controller private-key file<input id="sign-private-file" type="file" accept="application/json,.json"></label>
         <label class="file-picker">Server registration challenge<input id="sign-document-file" type="file" accept="application/json,.json"></label>
-        <label class="file-picker">Key passphrase<input id="sign-passphrase" type="password" minlength="16" autocomplete="current-password"></label>
         <button id="sign-button" type="button">Validate and sign document</button>
         <p class="local-only">Inspect the Server document before selecting it. The resulting signed package contains the public document and signature only; it does not contain the private key.</p>
       </section>
       <section id="signing-result" class="verification-result pending" aria-live="polite">
         <h2 id="signing-title">No document signed</h2>
-        <p id="signing-summary">Select an encrypted controller key and the exact JSON document supplied by the Server.</p>
+        <p id="signing-summary">Select a controller private key and the exact JSON document supplied by the Server.</p>
         <dl id="signing-details" hidden>
           <dt>Document</dt><dd id="signing-format"></dd>
           <dt>Controller</dt><dd id="signing-entity"></dd>
