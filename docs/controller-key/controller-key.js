@@ -123,23 +123,29 @@ async function loadControllerKey(keyPackage, passphrase) {
   return { privateKey, publicPackage: keyPackage.public_package };
 }
 
-function validateControllerDocument(document, publicPackage) {
+async function validateControllerDocument(document, publicPackage) {
   if (!document || typeof document !== "object" || Array.isArray(document) || Object.keys(document).length > 32) throw new Error("The signing document must be one bounded JSON object.");
   if (document.role !== "controller" || !CONTROLLER_PATTERN.test(document.entity_id || "")) throw new Error("This is not a controller action.");
   if (document.entity_id !== publicPackage.entity_id || document.key_id !== publicPackage.key_id || document.public_key_sha256 !== publicPackage.public_key_sha256) throw new Error("The document targets a different controller key.");
-  if (document.format === "mp-opt-trust-key-registration-v1") {
-    if (!(["register", "rotate"].includes(document.action))) throw new Error("The controller registration action is invalid.");
-  } else if (document.format === "mp-opt-controller-trust-declaration-v1") {
-    if (document.statement_type !== "initial_trust_declaration" || !SHA_PATTERN.test(document.statement_sha256 || "")) throw new Error("The controller trust declaration is invalid.");
-  } else {
+  if (document.format !== "mp-opt-controller-trust-registration-v2") {
     throw new Error("This controller key cannot sign that document type.");
   }
+  if (!(["register", "rotate"].includes(document.action))) throw new Error("The controller registration action is invalid.");
+  if (document.trust_scope !== "controller_governance_authority" || document.governance_authorisation !== "root_passkey_per_publication") throw new Error("The controller registration has an unsupported trust scope.");
+  const exactAction = {
+    format: "mp-opt-trust-action-v1", action: document.action, instance_id: document.instance_id,
+    entity_id: document.entity_id, key_id: document.key_id, role: document.role,
+    algorithm: document.algorithm, public_key_sha256: document.public_key_sha256,
+    trust_scope: document.trust_scope, governance_authorisation: document.governance_authorisation,
+    supersedes_key_id: document.supersedes_key_id, reason: document.reason,
+  };
+  if (document.action_sha256 !== await sha256Hex(canonicalBytes(exactAction))) throw new Error("The controller registration action digest is invalid.");
   canonicalBytes(document);
 }
 
 async function signControllerDocument(keyPackage, passphrase, document) {
   const { privateKey, publicPackage } = await loadControllerKey(keyPackage, passphrase);
-  validateControllerDocument(document, publicPackage);
+  await validateControllerDocument(document, publicPackage);
   const payload = concat(textEncoder.encode(NAMESPACE), new Uint8Array([0]), canonicalBytes(document));
   const signature = await crypto.subtle.sign({ name: "Ed25519" }, privateKey, payload);
   return {
@@ -160,6 +166,11 @@ async function readJsonFile(input, label) {
 
 if (typeof document !== "undefined") {
   let generated = null; let signed = null;
+  const controllerIdInput = document.getElementById("controller-id");
+  if (!controllerIdInput.value) {
+    const random = crypto.getRandomValues(new Uint8Array(10));
+    controllerIdInput.value = `ctl-${[...random].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+  }
   const generateButton = document.getElementById("generate-button");
   generateButton.addEventListener("click", async () => {
     const passphrase = document.getElementById("generate-passphrase").value;
