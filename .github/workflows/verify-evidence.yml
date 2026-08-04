@@ -28,6 +28,8 @@ jobs:
         run: python tools/test_browser_verifier.py
       - name: Verify the client-only processor-key generator
         run: node tools/test_processor_key_generator.js
+      - name: Verify the client-only controller-key custody tool
+        run: node tools/test_controller_key_custody.js
   ingestion-path-validation:
     name: Ingestion path validation
     if: github.event_name == 'pull_request'

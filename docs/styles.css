@@ -8,6 +8,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 body {
   margin: 0;
@@ -54,7 +55,7 @@ a { color: var(--accent); font-weight: 650; }
 
 .verifier-panel { border-color: #bfdbfe; background: #eff6ff; }
 .file-picker { display: grid; gap: .45rem; margin: 1rem 0; font-weight: 700; }
-.file-picker input { width: 100%; padding: .8rem; border: 1px solid #94a3b8; border-radius: .6rem; background: #fff; font: inherit; font-weight: 400; }
+.file-picker input, .file-picker textarea { width: 100%; padding: .8rem; border: 1px solid #94a3b8; border-radius: .6rem; background: #fff; font: inherit; font-weight: 400; }
 button { border: 0; border-radius: .6rem; padding: .75rem 1rem; background: #1d4ed8; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
 button:disabled { cursor: wait; opacity: .55; }
 .download-actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; }
