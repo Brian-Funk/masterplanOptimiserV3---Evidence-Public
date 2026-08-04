@@ -18,7 +18,7 @@
       <section class="verifier-panel">
         <h2>1. Generate a controller key</h2>
         <p>Do this once on a controller-controlled device. Download both files and preserve the encrypted private package separately from the public package.</p>
-        <label class="file-picker">Controller entity ID<input id="controller-id" maxlength="52" pattern="ctl-[a-z0-9]{8,48}" placeholder="ctl-example0001" autocomplete="off"></label>
+        <label class="file-picker">Opaque controller entity ID<input id="controller-id" maxlength="52" pattern="ctl-[a-z0-9]{8,48}" autocomplete="off"></label>
         <label class="file-picker">Existing key ID, only for rotation<input id="supersedes-key" pattern="ek-[0-9a-f]{16}" placeholder="ek-0123456789abcdef" autocomplete="off"></label>
         <label class="file-picker">Passphrase<input id="generate-passphrase" type="password" minlength="16" autocomplete="new-password"></label>
         <label class="file-picker">Repeat passphrase<input id="generate-passphrase-repeat" type="password" minlength="16" autocomplete="new-password"></label>
@@ -41,9 +41,9 @@
 
       <section class="verifier-panel">
         <h2>2. Sign an exact controller document</h2>
-        <p>Download or copy the exact JSON challenge from the Server. This tool signs only controller registration, rotation, and initial trust declarations that match the selected key.</p>
+        <p>Download or copy the exact JSON challenge from the Server. This tool signs only the deployment-bound controller registration or rotation format that matches the selected key.</p>
         <label class="file-picker">Encrypted controller-key package<input id="sign-private-file" type="file" accept="application/json,.json"></label>
-        <label class="file-picker">Server challenge or trust declaration<input id="sign-document-file" type="file" accept="application/json,.json"></label>
+        <label class="file-picker">Server registration challenge<input id="sign-document-file" type="file" accept="application/json,.json"></label>
         <label class="file-picker">Key passphrase<input id="sign-passphrase" type="password" minlength="16" autocomplete="current-password"></label>
         <button id="sign-button" type="button">Validate and sign document</button>
         <p class="local-only">Inspect the Server document before selecting it. The resulting signed package contains the public document and signature only; it does not contain the private key.</p>
