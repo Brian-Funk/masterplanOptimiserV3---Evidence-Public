@@ -11,8 +11,7 @@ import subprocess
 import sys
 from typing import Any
 
-import portable_bundle
-import evidence_git
+import evidence_bundle
 
 
 ARCHIVE_PATH_RE = re.compile(
@@ -36,6 +35,7 @@ STATIC_FILES = {
     "docs/verify-evidence/verify-evidence.js",
     "instances/README.md",
     "tools/evidence_archive_repository.py",
+    "tools/evidence_bundle.py",
     "tools/evidence_git.py",
     "tools/evidence_manifest.py",
     "tools/portable_bundle.py",
@@ -88,7 +88,7 @@ def verify_repository(root: Path) -> dict[str, Any]:
         match = ARCHIVE_PATH_RE.fullmatch(relative)
         if match is None:
             raise ArchiveRepositoryError(f"Bundle path is invalid: {relative}")
-        summary = portable_bundle.verify_bundle(bundle)
+        summary = evidence_bundle.verify_bundle(bundle)
         instance_id, bundle_id = match.group(1), match.group(2)
         if summary["instance_id"] != instance_id or summary["bundle_id"] != bundle_id:
             raise ArchiveRepositoryError("Bundle path does not match its verified identity")
@@ -188,8 +188,8 @@ def cli(argv: list[str] | None = None) -> int:
         print(json.dumps(result, sort_keys=True))
         return 0
     except (
-        ArchiveRepositoryError, portable_bundle.PortableBundleError,
-        evidence_git.EvidenceGitError, OSError,
+        ArchiveRepositoryError, evidence_bundle.BundleError,
+        OSError,
     ) as exc:
         print(f"Evidence archive verification failed: {exc}", file=sys.stderr)
         return 1

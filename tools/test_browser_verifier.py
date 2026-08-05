@@ -15,6 +15,8 @@ import tempfile
 import uuid
 import zipfile
 
+from cryptography.hazmat.primitives import serialization
+
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
@@ -268,6 +270,59 @@ def fixture(directory: Path) -> Path:
         created_at="2026-01-01T00:03:00Z",
         record_id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     )
+    controller_key_id = evidence_manifest.key_id(controller_key)
+    instance_key_id = evidence_manifest.key_id(instance_key)
+    archive_trust_document = {
+        "format": "mp-opt-controller-archive-trust-v1",
+        "instance_id": INSTANCE_ID,
+        "controller_id": CONTROLLER_ID,
+        "controller_key_id": controller_key_id,
+        "controller_public_key_sha256": hashlib.sha256(controller_key.encode("ascii")).hexdigest(),
+        "instance_key_id": instance_key_id,
+        "instance_public_key_sha256": hashlib.sha256(instance_key.encode("ascii")).hexdigest(),
+        "scope": "accountability_evidence_archive",
+        "signed_at": "2026-01-01T00:04:00Z",
+    }
+    loaded_controller_private = serialization.load_ssh_private_key(
+        controller_private.read_bytes(), password=None,
+    )
+    archive_trust_proof = {
+        "format": "mp-opt-ed25519-signature-v1",
+        "key_id": controller_key_id,
+        "namespace": "mp-opt-role-trust-v1",
+        "signature": base64.b64encode(loaded_controller_private.sign(
+            b"mp-opt-role-trust-v1\0" + evidence_git.canonical_json(archive_trust_document)
+        )).decode("ascii"),
+    }
+    archive_trust_package = {
+        "format": "mp-opt-signed-controller-archive-trust-v1",
+        "namespace": "mp-opt-role-trust-v1",
+        "document": archive_trust_document,
+        "proof": archive_trust_proof,
+        "controller_public_key": controller_key,
+        "instance_public_key": instance_key,
+    }
+    archive_trust_raw = evidence_git.canonical_json(archive_trust_package)
+    archive_trust_sha256 = hashlib.sha256(archive_trust_raw).hexdigest()
+    evidence_manifest.append_record(
+        instance_root / "ledger",
+        instance_id=INSTANCE_ID,
+        chain_id=CHAIN_ID,
+        record_type="evidence.archive_trust_bound",
+        payload={
+            "controller_id": CONTROLLER_ID,
+            "controller_key_id": controller_key_id,
+            "key_id": instance_key_id,
+            "public_key_sha256": archive_trust_document["instance_public_key_sha256"],
+            "statement_sha256": archive_trust_sha256,
+            "proof_sha256": hashlib.sha256(evidence_git.canonical_json(archive_trust_proof)).hexdigest(),
+            "status": "verified",
+        },
+        private_key=instance_private,
+        public_key=instance_root / "trust" / "instance.pub",
+        created_at="2026-01-01T00:04:00Z",
+        record_id="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    )
     for name in ("requests", "purges", "attestations", "backups", "anchors", "summaries"):
         (instance_root / name).mkdir()
     home = directory / "local-evidence"
@@ -278,9 +333,11 @@ def fixture(directory: Path) -> Path:
     (home / "artifacts").mkdir()
     for artifact_sha256, artifact_raw in artifacts.items():
         (home / "artifacts" / f"{artifact_sha256}.json").write_bytes(artifact_raw)
+    (home / "archive-trust").mkdir()
+    (home / "archive-trust" / f"{archive_trust_sha256}.json").write_bytes(archive_trust_raw)
     payload = {
         path.relative_to(home).as_posix(): path.read_bytes()
-        for root_name in ("anchors", "artifacts", "ledger", "public")
+        for root_name in ("anchors", "archive-trust", "artifacts", "ledger", "public")
         for path in sorted((home / root_name).rglob("*"))
         if path.is_file()
     }
@@ -290,15 +347,21 @@ def fixture(directory: Path) -> Path:
     ]
     chain = evidence_manifest.verify_chain(home / "ledger", home / "public" / "instance_signing_key.pub")
     identity = "|".join((
-        chain["instance_id"], chain["chain_id"], chain["head_sha256"],
+        CONTROLLER_ID, chain["instance_id"], chain["chain_id"], chain["head_sha256"],
+        archive_trust_sha256,
         hashlib.sha256(evidence_git.canonical_json({"files": rows})).hexdigest(),
     ))
     latest = evidence_manifest.load_json_bytes(sorted((home / "ledger").glob("[0-9]" * 12 + "_*.json"))[-1].read_bytes())
     document = {
-        "format": "mp-opt-evidence-bundle-v1",
+        "format": "mp-opt-evidence-bundle-v2",
         "bundle_id": str(uuid.uuid5(LOCAL_BUNDLE_NAMESPACE, identity)),
         "created_at": latest["created_at"],
         "instance_id": chain["instance_id"],
+        "controller_id": CONTROLLER_ID,
+        "controller_key_id": controller_key_id,
+        "controller_public_key_sha256": archive_trust_document["controller_public_key_sha256"],
+        "instance_key_id": instance_key_id,
+        "archive_trust_sha256": archive_trust_sha256,
         "chain_id": chain["chain_id"],
         "chain_head_sha256": chain["head_sha256"],
         "record_count": chain["records"],

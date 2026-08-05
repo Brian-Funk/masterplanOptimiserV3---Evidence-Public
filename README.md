@@ -1,6 +1,6 @@
 # Controller accountability evidence archive
 
-This public repository is a reviewed template and documentation site for deterministic, self-contained portable evidence bundles. It does not contain a deployment's evidence records. Each Masterplan deployment keeps its local signed hash-chained ledger as the authoritative record. A controller may use a separately governed repository as an additional off-server copy, not as the primary evidence store.
+This public repository is a reviewed template, offline verifier, and documentation site for deterministic, self-contained evidence bundles. A v2 bundle verifies the complete instance-signed chain, its referenced Desktop proofs, and the controller's signature over the exact instance evidence key. This repository does not contain a deployment's evidence records. Each Masterplan deployment keeps its local signed hash-chained ledger as the authoritative record. A controller may use a separately governed repository as an additional off-server copy, not as the primary evidence store.
 
 ## Safe workflow
 
