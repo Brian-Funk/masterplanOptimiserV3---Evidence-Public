@@ -4,7 +4,7 @@ const MAX_ZIP_BYTES = 258 * 1024 * 1024;
 const ZIP_NAMES = ["accountability.evidence", "accountability.evidence.sha256", "VERIFYING.txt"];
 const BUNDLE_ROOT = new Set(["bundle.json", "bundle.sha256", "VERIFYING.md"]);
 const BUNDLE_FORMAT = "mp-opt-portable-evidence-bundle-v1";
-const LOCAL_BUNDLE_FORMAT = "mp-opt-evidence-bundle-v1";
+const LOCAL_BUNDLE_FORMAT = "mp-opt-evidence-bundle-v2";
 const RECORD_FORMAT = "mp-opt-evidence-record-v1";
 const SSH_NAMESPACE = "mp-opt-evidence-v1";
 const UUID_NAMESPACE = "8c36ce0a-ec6a-4b9b-981e-dfb7f891da70";
@@ -128,6 +128,22 @@ async function verifyDesktopEvidenceArtifact(raw, payload, expectedDigest) {
   ) fail("A Desktop evidence artifact does not match its signed ledger record.");
 }
 
+async function verifyRawEd25519(documentValue, proof, publicText, namespace, label) {
+  exactKeys(proof, ["format", "key_id", "namespace", "signature"], `${label} proof`);
+  const publicKey = parsePublicKey(publicText);
+  const expectedKeyId = await keyId(publicKey);
+  let signature;
+  try { signature = Uint8Array.from(atob(proof.signature), (character) => character.charCodeAt(0)); }
+  catch { fail(`${label} signature is not valid base64.`); }
+  if (proof.format !== "mp-opt-ed25519-signature-v1" || proof.namespace !== namespace || proof.key_id !== expectedKeyId || signature.length !== 64) fail(`${label} signature identity is invalid.`);
+  let imported;
+  try { imported = await crypto.subtle.importKey("raw", publicKey.key, { name: "Ed25519" }, false, ["verify"]); }
+  catch { fail(`This browser cannot verify ${label} Ed25519 evidence.`); }
+  const message = concat(textEncoder.encode(`${namespace}\0`), textEncoder.encode(`${canonicalJson(documentValue)}\n`));
+  if (!await crypto.subtle.verify({ name: "Ed25519" }, imported, signature, message)) fail(`${label} signature is invalid.`);
+  return publicKey;
+}
+
 function crc32(raw) {
   let crc = 0xffffffff;
   for (const byte of raw) {
@@ -248,12 +264,12 @@ async function uuidV5(namespace, name) {
 }
 
 async function verifyLocalBundle(tar, manifestRaw, manifest, addCheck) {
-  exactKeys(manifest, ["format", "bundle_id", "created_at", "instance_id", "chain_id", "chain_head_sha256", "record_count", "files"], "The local bundle manifest");
+  exactKeys(manifest, ["format", "bundle_id", "created_at", "controller_id", "controller_key_id", "controller_public_key_sha256", "instance_id", "instance_key_id", "archive_trust_sha256", "chain_id", "chain_head_sha256", "record_count", "files"], "The local bundle manifest");
   if (!canonicalUuid(manifest.bundle_id) || !canonicalUuid(manifest.instance_id) || !canonicalUuid(manifest.chain_id) || !Array.isArray(manifest.files) || manifest.files.length === 0) fail("The local bundle manifest identity or schema is invalid.");
   const payload = new Map(); const declared = new Set();
   for (const row of manifest.files) {
     exactKeys(row, ["path", "sha256", "size"], "A local bundle file row");
-    if (typeof row.path !== "string" || !safePath(row.path) || !["ledger", "public", "anchors", "artifacts"].includes(row.path.split("/", 1)[0]) || declared.has(row.path)) fail("A local bundle file path is unsafe or duplicated.");
+    if (typeof row.path !== "string" || !safePath(row.path) || !["ledger", "public", "anchors", "artifacts", "archive-trust"].includes(row.path.split("/", 1)[0]) || declared.has(row.path)) fail("A local bundle file path is unsafe or duplicated.");
     const raw = tar.get(`evidence/${row.path}`);
     if (!raw || raw.length !== row.size || await sha256(raw) !== row.sha256) fail(`The declared evidence file ${row.path} does not match its digest.`);
     payload.set(row.path, raw); declared.add(row.path);
@@ -268,7 +284,7 @@ async function verifyLocalBundle(tar, manifestRaw, manifest, addCheck) {
   const recordPattern = /^ledger\/([0-9]{12})_([0-9a-f-]{36})\.json$/;
   const records = [...payload.entries()].filter(([name]) => recordPattern.test(name)).sort(([left], [right]) => left.localeCompare(right));
   if (records.length === 0 || records.length !== manifest.record_count) fail("The local signed record count does not match its manifest.");
-  let previous = "GENESIS"; let head = null; const artifactReferences = new Map();
+  let previous = "GENESIS"; let head = null; const artifactReferences = new Map(); const archiveTrustBindings = new Set();
   for (let index = 0; index < records.length; index += 1) {
     const [name, raw] = records[index]; const match = name.match(recordPattern); const record = parseCanonicalJson(raw, `record ${index + 1}`);
     exactKeys(record, ["format", "instance_id", "chain_id", "sequence", "record_id", "record_type", "created_at", "signer", "previous_record_sha256", "management_audit_tail_sha256", "payload"], `Record ${index + 1}`);
@@ -281,6 +297,7 @@ async function verifyLocalBundle(tar, manifestRaw, manifest, addCheck) {
       if (typeof digestValue !== "string" || !/^[0-9a-f]{64}$/.test(digestValue) || artifactReferences.has(digestValue)) fail("A Desktop evidence artifact reference is invalid or duplicated.");
       artifactReferences.set(digestValue, record.payload);
     }
+    if (record.record_type === "evidence.archive_trust_bound" && typeof record.payload.statement_sha256 === "string") archiveTrustBindings.add(record.payload.statement_sha256);
     head = await sha256(raw); previous = head;
   }
   if (head !== manifest.chain_head_sha256) fail("The local signed-chain head does not match its manifest.");
@@ -293,8 +310,35 @@ async function verifyLocalBundle(tar, manifestRaw, manifest, addCheck) {
     await verifyDesktopEvidenceArtifact(artifactRaw, recordPayload, digestValue);
   }
   if (artifactReferences.size > 0) addCheck(`All ${artifactReferences.size} Desktop processor signatures and ledger bindings`);
+  if (!/^[0-9a-f]{64}$/.test(manifest.archive_trust_sha256) || !archiveTrustBindings.has(manifest.archive_trust_sha256)) fail("The controller archive trust is not bound into the signed ledger.");
+  const trustRaw = payload.get(`archive-trust/${manifest.archive_trust_sha256}.json`);
+  if (!trustRaw || await sha256(trustRaw) !== manifest.archive_trust_sha256) fail("The controller archive-trust package is missing or changed.");
+  const trustPackage = parseCanonicalJson(trustRaw, "controller archive trust");
+  exactKeys(trustPackage, ["format", "namespace", "document", "proof", "controller_public_key", "instance_public_key"], "The controller archive-trust package");
+  if (trustPackage.format !== "mp-opt-signed-controller-archive-trust-v1" || trustPackage.namespace !== "mp-opt-role-trust-v1") fail("The controller archive-trust package format is unsupported.");
+  const trustDocument = trustPackage.document;
+  exactKeys(trustDocument, ["format", "instance_id", "controller_id", "controller_key_id", "controller_public_key_sha256", "instance_key_id", "instance_public_key_sha256", "scope", "signed_at"], "The controller archive-trust document");
+  const controllerPublic = await verifyRawEd25519(trustDocument, trustPackage.proof, trustPackage.controller_public_key, "mp-opt-role-trust-v1", "The controller archive-trust");
+  const boundInstancePublic = parsePublicKey(trustPackage.instance_public_key);
+  if (
+    trustDocument.format !== "mp-opt-controller-archive-trust-v1"
+    || trustDocument.scope !== "accountability_evidence_archive"
+    || trustDocument.controller_id !== manifest.controller_id
+    || trustDocument.controller_key_id !== manifest.controller_key_id
+    || trustDocument.controller_key_id !== await keyId(controllerPublic)
+    || trustDocument.controller_public_key_sha256 !== manifest.controller_public_key_sha256
+    || trustDocument.controller_public_key_sha256 !== await sha256(textEncoder.encode(controllerPublic.canonical))
+    || trustDocument.instance_id !== manifest.instance_id
+    || trustDocument.instance_key_id !== manifest.instance_key_id
+    || trustDocument.instance_key_id !== expectedKeyId
+    || trustDocument.instance_public_key_sha256 !== await sha256(textEncoder.encode(publicKey.canonical))
+    || boundInstancePublic.canonical !== publicKey.canonical
+    || !/^ctl-[a-z0-9]{8,48}$/.test(trustDocument.controller_id)
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(trustDocument.signed_at)
+  ) fail("The controller archive trust does not match this instance evidence chain.");
+  addCheck("Controller authorisation of the exact instance evidence key");
   const rowsDigest = await sha256(textEncoder.encode(`${canonicalJson({ files: manifest.files })}\n`));
-  const identity = [manifest.instance_id, manifest.chain_id, manifest.chain_head_sha256, rowsDigest].join("|");
+  const identity = [manifest.controller_id, manifest.instance_id, manifest.chain_id, manifest.chain_head_sha256, manifest.archive_trust_sha256, rowsDigest].join("|");
   if (await uuidV5(LOCAL_UUID_NAMESPACE, identity) !== manifest.bundle_id) fail("The deterministic local bundle identity does not match its contents.");
   addCheck("Deterministic local bundle identity and exact chain-head binding");
   return manifest;
