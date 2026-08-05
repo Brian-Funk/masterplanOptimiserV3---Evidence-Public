@@ -108,11 +108,18 @@ async function verifyDesktopEvidenceArtifact(raw, payload, expectedDigest) {
   const documentRaw = textEncoder.encode(`${canonicalJson(documentValue)}\n`);
   const signingInput = concat(textEncoder.encode("mp-opt-desktop-evidence-v1\0"), documentRaw);
   if (!await crypto.subtle.verify({ name: "Ed25519" }, imported, signature, signingInput)) fail("A Desktop evidence signature is invalid.");
-  const expectedDocument = payload.document_sha256 ?? payload.report_sha256 ?? payload.copy_resolution_sha256;
+  const digestFields = ["document_sha256", "report_sha256", "copy_resolution_sha256"]
+    .filter((field) => Object.prototype.hasOwnProperty.call(payload, field));
+  if (digestFields.length !== 1) fail("A Desktop evidence artifact has an ambiguous document binding.");
+  const digestField = digestFields[0];
+  const expectedDocument = payload[digestField];
+  const boundDocumentRaw = digestField === "document_sha256"
+    ? documentRaw
+    : textEncoder.encode(canonicalJson(documentValue));
   const expectedKey = payload.key_id ?? payload.processor_key_id;
   const expectedFingerprint = payload.public_key_sha256 ?? payload.completed_public_key_sha256;
   if (
-    expectedDocument !== await sha256(documentRaw)
+    expectedDocument !== await sha256(boundDocumentRaw)
     || payload.signature_sha256 !== await sha256(textEncoder.encode(`${canonicalJson(proof)}\n`))
     || expectedKey !== proof.key_id
     || expectedFingerprint !== await sha256(textEncoder.encode(publicKey.canonical))

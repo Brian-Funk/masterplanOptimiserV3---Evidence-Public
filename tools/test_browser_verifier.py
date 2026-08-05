@@ -179,6 +179,95 @@ def fixture(directory: Path) -> Path:
         created_at="2026-01-01T00:01:00Z",
         record_id="55555555-5555-4555-8555-555555555555",
     )
+    artifacts = {package_sha256: package_raw}
+
+    def append_deletion_artifact(
+        *, document: dict, record_type: str, digest_field: str,
+        created_at: str, record_id: str,
+    ) -> None:
+        signed_document, public_key, desktop_signature = desktop_proof(document)
+        key_id = evidence_manifest.key_id(public_key)
+        public_fingerprint = hashlib.sha256(public_key.encode("ascii")).hexdigest()
+        signed_proof = {
+            "format": "mp-opt-ed25519-signature-v1",
+            "key_id": key_id,
+            "namespace": "mp-opt-desktop-evidence-v1",
+            "signature": desktop_signature,
+        }
+        signed_package = {
+            "format": "mp-opt-signed-desktop-evidence-v1",
+            "namespace": "mp-opt-desktop-evidence-v1",
+            "document": signed_document,
+            "proof": signed_proof,
+            "public_key": public_key,
+        }
+        signed_package_raw = evidence_git.canonical_json(signed_package)
+        signed_package_sha256 = hashlib.sha256(signed_package_raw).hexdigest()
+        domain_document_raw = evidence_git.canonical_json(signed_document).rstrip(b"\n")
+        payload = {
+            "case_id": "66666666-6666-4666-8666-666666666666",
+            "work_order_id": signed_document["work_order_id"],
+            "event_ref": signed_document["event_ref"],
+            "processor_entity_id": signed_document["entity_id"],
+            "processor_key_id": key_id,
+            digest_field: hashlib.sha256(domain_document_raw).hexdigest(),
+            "signature_sha256": hashlib.sha256(
+                evidence_git.canonical_json(signed_proof)
+            ).hexdigest(),
+            "evidence_package_sha256": signed_package_sha256,
+            "completed_public_key_sha256": public_fingerprint,
+            "status": "verified",
+        }
+        evidence_manifest.append_record(
+            instance_root / "ledger",
+            instance_id=INSTANCE_ID,
+            chain_id=CHAIN_ID,
+            record_type=record_type,
+            payload=payload,
+            private_key=instance_private,
+            public_key=instance_root / "trust" / "instance.pub",
+            created_at=created_at,
+            record_id=record_id,
+        )
+        artifacts[signed_package_sha256] = signed_package_raw
+
+    shared_deletion = {
+        "instance_id": INSTANCE_ID,
+        "event_ref": "44444444-4444-4444-8444-444444444444",
+        "entity_id": "prc-synthetic0001",
+        "role": "processor",
+        "algorithm": "Ed25519",
+        "work_order_id": "77777777-7777-4777-8777-777777777777",
+        "completed_at": "2026-01-01T00:02:00Z",
+    }
+    append_deletion_artifact(
+        document={
+            **shared_deletion,
+            "format": "mp-opt-desktop-deletion-receipt-v2",
+            "subject_ref": "88888888-8888-4888-8888-888888888888",
+            "operation": "delete_subject",
+            "outcome": "deleted",
+            "deleted_counts": {"availability": 1},
+            "outstanding_actions": [],
+        },
+        record_type="deletion.desktop_report_received",
+        digest_field="report_sha256",
+        created_at="2026-01-01T00:02:00Z",
+        record_id="99999999-9999-4999-8999-999999999999",
+    )
+    append_deletion_artifact(
+        document={
+            **shared_deletion,
+            "format": "mp-opt-desktop-copy-resolution-v1",
+            "disposition": "no_known_local_copies",
+            "software_inventory_complete": True,
+            "operator_confirmation": "LOCAL COPIES RESOLVED",
+        },
+        record_type="deletion.desktop_copy_resolution",
+        digest_field="copy_resolution_sha256",
+        created_at="2026-01-01T00:03:00Z",
+        record_id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    )
     for name in ("requests", "purges", "attestations", "backups", "anchors", "summaries"):
         (instance_root / name).mkdir()
     home = directory / "local-evidence"
@@ -187,7 +276,8 @@ def fixture(directory: Path) -> Path:
     shutil.copyfile(instance_root / "trust" / "instance.pub", home / "public" / "instance_signing_key.pub")
     (home / "anchors").mkdir()
     (home / "artifacts").mkdir()
-    (home / "artifacts" / f"{package_sha256}.json").write_bytes(package_raw)
+    for artifact_sha256, artifact_raw in artifacts.items():
+        (home / "artifacts" / f"{artifact_sha256}.json").write_bytes(artifact_raw)
     payload = {
         path.relative_to(home).as_posix(): path.read_bytes()
         for root_name in ("anchors", "artifacts", "ledger", "public")
