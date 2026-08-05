@@ -88,6 +88,39 @@ async function verifySshSignature(message, signatureText, publicText) {
   return publicKey;
 }
 
+async function verifyDesktopEvidenceArtifact(raw, payload, expectedDigest) {
+  if (await sha256(raw) !== expectedDigest) fail("A Desktop evidence artifact digest does not match its signed ledger reference.");
+  const packageValue = parseCanonicalJson(raw, "Desktop evidence artifact");
+  exactKeys(packageValue, ["format", "namespace", "document", "proof", "public_key"], "A Desktop evidence artifact");
+  if (packageValue.format !== "mp-opt-signed-desktop-evidence-v1" || packageValue.namespace !== "mp-opt-desktop-evidence-v1") fail("A Desktop evidence artifact has an unsupported format.");
+  const documentValue = packageValue.document; const proof = packageValue.proof;
+  if (typeof documentValue !== "object" || documentValue === null || Array.isArray(documentValue) || typeof proof !== "object" || proof === null || Array.isArray(proof)) fail("A Desktop evidence artifact document or proof is invalid.");
+  exactKeys(proof, ["format", "key_id", "namespace", "signature"], "A Desktop evidence proof");
+  const publicKey = parsePublicKey(packageValue.public_key);
+  const expectedKeyId = await keyId(publicKey);
+  let signature;
+  try { signature = Uint8Array.from(atob(proof.signature), (character) => character.charCodeAt(0)); }
+  catch { fail("A Desktop evidence signature is not valid base64."); }
+  if (proof.format !== "mp-opt-ed25519-signature-v1" || proof.namespace !== "mp-opt-desktop-evidence-v1" || proof.key_id !== expectedKeyId || signature.length !== 64) fail("A Desktop evidence signature identity is invalid.");
+  let imported;
+  try { imported = await crypto.subtle.importKey("raw", publicKey.key, { name: "Ed25519" }, false, ["verify"]); }
+  catch { fail("This browser cannot verify Desktop Ed25519 evidence."); }
+  const documentRaw = textEncoder.encode(`${canonicalJson(documentValue)}\n`);
+  const signingInput = concat(textEncoder.encode("mp-opt-desktop-evidence-v1\0"), documentRaw);
+  if (!await crypto.subtle.verify({ name: "Ed25519" }, imported, signature, signingInput)) fail("A Desktop evidence signature is invalid.");
+  const expectedDocument = payload.document_sha256 ?? payload.report_sha256 ?? payload.copy_resolution_sha256;
+  const expectedKey = payload.key_id ?? payload.processor_key_id;
+  const expectedFingerprint = payload.public_key_sha256 ?? payload.completed_public_key_sha256;
+  if (
+    expectedDocument !== await sha256(documentRaw)
+    || payload.signature_sha256 !== await sha256(textEncoder.encode(`${canonicalJson(proof)}\n`))
+    || expectedKey !== proof.key_id
+    || expectedFingerprint !== await sha256(textEncoder.encode(publicKey.canonical))
+    || documentValue.key_id !== proof.key_id
+    || documentValue.public_key_sha256 !== expectedFingerprint
+  ) fail("A Desktop evidence artifact does not match its signed ledger record.");
+}
+
 function crc32(raw) {
   let crc = 0xffffffff;
   for (const byte of raw) {
@@ -213,7 +246,7 @@ async function verifyLocalBundle(tar, manifestRaw, manifest, addCheck) {
   const payload = new Map(); const declared = new Set();
   for (const row of manifest.files) {
     exactKeys(row, ["path", "sha256", "size"], "A local bundle file row");
-    if (typeof row.path !== "string" || !safePath(row.path) || !["ledger", "public", "anchors"].includes(row.path.split("/", 1)[0]) || declared.has(row.path)) fail("A local bundle file path is unsafe or duplicated.");
+    if (typeof row.path !== "string" || !safePath(row.path) || !["ledger", "public", "anchors", "artifacts"].includes(row.path.split("/", 1)[0]) || declared.has(row.path)) fail("A local bundle file path is unsafe or duplicated.");
     const raw = tar.get(`evidence/${row.path}`);
     if (!raw || raw.length !== row.size || await sha256(raw) !== row.sha256) fail(`The declared evidence file ${row.path} does not match its digest.`);
     payload.set(row.path, raw); declared.add(row.path);
@@ -228,7 +261,7 @@ async function verifyLocalBundle(tar, manifestRaw, manifest, addCheck) {
   const recordPattern = /^ledger\/([0-9]{12})_([0-9a-f-]{36})\.json$/;
   const records = [...payload.entries()].filter(([name]) => recordPattern.test(name)).sort(([left], [right]) => left.localeCompare(right));
   if (records.length === 0 || records.length !== manifest.record_count) fail("The local signed record count does not match its manifest.");
-  let previous = "GENESIS"; let head = null;
+  let previous = "GENESIS"; let head = null; const artifactReferences = new Map();
   for (let index = 0; index < records.length; index += 1) {
     const [name, raw] = records[index]; const match = name.match(recordPattern); const record = parseCanonicalJson(raw, `record ${index + 1}`);
     exactKeys(record, ["format", "instance_id", "chain_id", "sequence", "record_id", "record_type", "created_at", "signer", "previous_record_sha256", "management_audit_tail_sha256", "payload"], `Record ${index + 1}`);
@@ -236,10 +269,23 @@ async function verifyLocalBundle(tar, manifestRaw, manifest, addCheck) {
     const signature = payload.get(`${name}.sig`);
     if (!signature) fail(`Record ${index + 1} has no signature.`);
     await verifySshSignature(raw, asciiDecoder.decode(signature), publicKey.canonical);
+    if (record.payload.evidence_package_sha256 !== undefined) {
+      const digestValue = record.payload.evidence_package_sha256;
+      if (typeof digestValue !== "string" || !/^[0-9a-f]{64}$/.test(digestValue) || artifactReferences.has(digestValue)) fail("A Desktop evidence artifact reference is invalid or duplicated.");
+      artifactReferences.set(digestValue, record.payload);
+    }
     head = await sha256(raw); previous = head;
   }
   if (head !== manifest.chain_head_sha256) fail("The local signed-chain head does not match its manifest.");
   addCheck(`All ${records.length} local record signatures and chain links`);
+  const artifactPaths = [...payload.keys()].filter((name) => name.startsWith("artifacts/"));
+  if (artifactPaths.length !== artifactReferences.size) fail("Desktop evidence artifacts do not exactly match the signed ledger.");
+  for (const [digestValue, recordPayload] of artifactReferences) {
+    const artifactRaw = payload.get(`artifacts/${digestValue}.json`);
+    if (!artifactRaw) fail("A signed Desktop evidence artifact is missing.");
+    await verifyDesktopEvidenceArtifact(artifactRaw, recordPayload, digestValue);
+  }
+  if (artifactReferences.size > 0) addCheck(`All ${artifactReferences.size} Desktop processor signatures and ledger bindings`);
   const rowsDigest = await sha256(textEncoder.encode(`${canonicalJson({ files: manifest.files })}\n`));
   const identity = [manifest.instance_id, manifest.chain_id, manifest.chain_head_sha256, rowsDigest].join("|");
   if (await uuidV5(LOCAL_UUID_NAMESPACE, identity) !== manifest.bundle_id) fail("The deterministic local bundle identity does not match its contents.");

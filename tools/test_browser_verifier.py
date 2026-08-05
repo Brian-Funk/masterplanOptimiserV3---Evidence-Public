@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import base64
 import hashlib
 import json
 import shutil
@@ -39,6 +40,40 @@ def signed(path: Path, value: dict, private: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(evidence_git.canonical_json(value))
     evidence_manifest.sign_file(path, private)
+
+
+def desktop_proof(document: dict) -> tuple[dict, str, str]:
+    script = """
+const { createHash, generateKeyPairSync, sign } = require('node:crypto');
+const document = JSON.parse(Buffer.from(process.argv[1], 'base64').toString('utf8'));
+const canonical = (value) => {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}`;
+};
+const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+const der = publicKey.export({ type: 'spki', format: 'der' });
+const raw = der.subarray(der.length - 32);
+const algorithm = Buffer.from('ssh-ed25519');
+const length = (value) => { const result = Buffer.alloc(4); result.writeUInt32BE(value.length); return result; };
+const blob = Buffer.concat([length(algorithm), algorithm, length(raw), raw]);
+const publicText = `ssh-ed25519 ${blob.toString('base64')}`;
+const fingerprint = createHash('sha256').update(publicText, 'ascii').digest('hex');
+document.key_id = `ek-${fingerprint.slice(0, 16)}`;
+document.public_key_sha256 = fingerprint;
+const message = Buffer.concat([Buffer.from('mp-opt-desktop-evidence-v1\\0', 'ascii'), Buffer.from(`${canonical(document)}\\n`, 'utf8')]);
+process.stdout.write(JSON.stringify({
+  document,
+  publicKey: publicText,
+  signature: sign(null, message, privateKey).toString('base64')
+}));
+"""
+    result = subprocess.run(
+        ["node", "-e", script, base64.b64encode(json.dumps(document).encode()).decode("ascii")],
+        check=True, capture_output=True, text=True,
+    )
+    material = json.loads(result.stdout)
+    return material["document"], material["publicKey"], material["signature"]
 
 
 def fixture(directory: Path) -> Path:
@@ -90,6 +125,60 @@ def fixture(directory: Path) -> Path:
         created_at="2026-01-01T00:00:00Z",
         record_id="33333333-3333-4333-8333-333333333333",
     )
+    document = {
+        "format": "mp-opt-desktop-policy-acknowledgement-v1",
+        "instance_id": INSTANCE_ID,
+        "event_ref": "44444444-4444-4444-8444-444444444444",
+        "entity_id": "prc-synthetic0001",
+        "role": "processor",
+        "algorithm": "Ed25519",
+        "policy_version": 1,
+        "policy_sha256": "a" * 64,
+        "acknowledged_at": "2026-01-01T00:01:00Z",
+    }
+    document, processor_public, signature = desktop_proof(document)
+    processor_key_id = evidence_manifest.key_id(processor_public)
+    fingerprint = hashlib.sha256(processor_public.encode("ascii")).hexdigest()
+    assert document["key_id"] == processor_key_id
+    assert document["public_key_sha256"] == fingerprint
+    document_raw = evidence_git.canonical_json(document)
+    proof = {
+        "format": "mp-opt-ed25519-signature-v1",
+        "key_id": processor_key_id,
+        "namespace": "mp-opt-desktop-evidence-v1",
+        "signature": signature,
+    }
+    package = {
+        "format": "mp-opt-signed-desktop-evidence-v1",
+        "namespace": "mp-opt-desktop-evidence-v1",
+        "document": document,
+        "proof": proof,
+        "public_key": processor_public,
+    }
+    package_raw = evidence_git.canonical_json(package)
+    package_sha256 = hashlib.sha256(package_raw).hexdigest()
+    evidence_manifest.append_record(
+        instance_root / "ledger",
+        instance_id=INSTANCE_ID,
+        chain_id=CHAIN_ID,
+        record_type="desktop.policy_acknowledged",
+        payload={
+            "event_ref": document["event_ref"],
+            "entity_id": document["entity_id"],
+            "key_id": processor_key_id,
+            "policy_version": 1,
+            "policy_sha256": document["policy_sha256"],
+            "document_sha256": hashlib.sha256(document_raw).hexdigest(),
+            "signature_sha256": hashlib.sha256(evidence_git.canonical_json(proof)).hexdigest(),
+            "evidence_package_sha256": package_sha256,
+            "public_key_sha256": fingerprint,
+            "status": "verified",
+        },
+        private_key=instance_private,
+        public_key=instance_root / "trust" / "instance.pub",
+        created_at="2026-01-01T00:01:00Z",
+        record_id="55555555-5555-4555-8555-555555555555",
+    )
     for name in ("requests", "purges", "attestations", "backups", "anchors", "summaries"):
         (instance_root / name).mkdir()
     home = directory / "local-evidence"
@@ -97,9 +186,11 @@ def fixture(directory: Path) -> Path:
     (home / "public").mkdir()
     shutil.copyfile(instance_root / "trust" / "instance.pub", home / "public" / "instance_signing_key.pub")
     (home / "anchors").mkdir()
+    (home / "artifacts").mkdir()
+    (home / "artifacts" / f"{package_sha256}.json").write_bytes(package_raw)
     payload = {
         path.relative_to(home).as_posix(): path.read_bytes()
-        for root_name in ("anchors", "ledger", "public")
+        for root_name in ("anchors", "artifacts", "ledger", "public")
         for path in sorted((home / root_name).rglob("*"))
         if path.is_file()
     }
