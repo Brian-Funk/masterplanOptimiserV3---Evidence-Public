@@ -127,6 +127,46 @@ def fixture(directory: Path) -> Path:
         created_at="2026-01-01T00:00:00Z",
         record_id="33333333-3333-4333-8333-333333333333",
     )
+    evidence_manifest.append_record(
+        instance_root / "ledger",
+        instance_id=INSTANCE_ID,
+        chain_id=CHAIN_ID,
+        record_type="commissioning.recovery_key_acknowledged",
+        payload={
+            "instance_id": INSTANCE_ID,
+            "recipient_sha256": "1" * 64,
+            "download_acknowledged": True,
+            "local_reimport_verified": True,
+            "completed_at": "2026-01-01T00:00:10Z",
+        },
+        private_key=instance_private,
+        public_key=instance_root / "trust" / "instance.pub",
+        created_at="2026-01-01T00:00:10Z",
+        record_id="34343434-3434-4434-8434-343434343434",
+    )
+    evidence_manifest.append_record(
+        instance_root / "ledger",
+        instance_id=INSTANCE_ID,
+        chain_id=CHAIN_ID,
+        record_type="commissioning.completed",
+        payload={
+            "instance_id": INSTANCE_ID,
+            "status": "completed",
+            "recipient_sha256": "1" * 64,
+            "trust_establishment_sha256": "2" * 64,
+            "checks_sha256": "3" * 64,
+            "previous_chain_head_sha256": "4" * 64,
+            "download_acknowledged": True,
+            "local_reimport_verified": True,
+            "trust_scope": "controller_governance_authority",
+            "governance_authorisation": "root_passkey_per_publication",
+            "completed_at": "2026-01-01T00:00:20Z",
+        },
+        private_key=instance_private,
+        public_key=instance_root / "trust" / "instance.pub",
+        created_at="2026-01-01T00:00:20Z",
+        record_id="35353535-3535-4535-8535-353535353535",
+    )
     document = {
         "format": "mp-opt-desktop-policy-acknowledgement-v1",
         "instance_id": INSTANCE_ID,
@@ -270,6 +310,23 @@ def fixture(directory: Path) -> Path:
         created_at="2026-01-01T00:03:00Z",
         record_id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     )
+    evidence_manifest.append_record(
+        instance_root / "ledger",
+        instance_id=INSTANCE_ID,
+        chain_id=CHAIN_ID,
+        record_type="deletion.clean_backup_verified",
+        payload={
+            "local_snapshot_count": 1,
+            "superseded_portable_package_ids": [
+                "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+            ],
+            "status": "verified",
+        },
+        private_key=instance_private,
+        public_key=instance_root / "trust" / "instance.pub",
+        created_at="2026-01-01T00:03:30Z",
+        record_id="dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    )
     controller_key_id = evidence_manifest.key_id(controller_key)
     instance_key_id = evidence_manifest.key_id(instance_key)
     archive_trust_document = {
@@ -385,6 +442,13 @@ def fixture(directory: Path) -> Path:
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="mp-opt-browser-verifier-test.") as directory_name:
         export_zip = fixture(Path(directory_name))
+        with zipfile.ZipFile(export_zip) as archive:
+            bundle = Path(directory_name) / "verified-accountability.evidence"
+            bundle.write_bytes(archive.read("accountability.evidence"))
+        subprocess.run(
+            [sys.executable, str(ROOT / "tools" / "evidence_bundle.py"), "verify", "--bundle", str(bundle)],
+            check=True,
+        )
         subprocess.run(["node", str(ROOT / "tools" / "test_browser_verifier.js"), str(export_zip)], check=True)
     return 0
 
