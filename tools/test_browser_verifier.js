@@ -18,9 +18,9 @@ async function main() {
   assert.equal(receipt, `${await verifier.sha256(bundle)}  accountability.evidence\n`);
   const checks = [];
   const manifest = await verifier.verifyBundle(bundle, (label) => checks.push(label));
-  assert.equal(manifest.record_count, 1);
+  assert.equal(manifest.record_count, 2);
   assert.equal(manifest.instance_id, "11111111-1111-4111-8111-111111111111");
-  assert.equal(checks.length, 3);
+  assert.equal(checks.length, 4);
 
   const tampered = raw.slice();
   const marker = Buffer.from(receipt, "utf8");
