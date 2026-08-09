@@ -19,3 +19,25 @@ The integrated Server uploader is disabled by default. When explicitly enabled f
 Never add database files, backups, private keys, secrets, names, personal email addresses, task content, or schedules. The token is never part of a bundle, summary, ledger, database, backup or diagnostic.
 
 A valid signature proves that the identified key signed the exact statement. It does not prove physical deletion, absence of copies outside controlled systems, or legal compliance.
+
+## Public local-only tools
+
+GitHub Pages exposes three reviewed browser tools. They use bundled code and
+self-hosted fonts, make no network request, and do not persist or upload private
+material:
+
+- [Complete-chain verifier](https://brian-funk.github.io/masterplanOptimiserV3---Evidence-Public/verify-evidence/)
+  opens a portable evidence ZIP and verifies its records, chain links, public
+  keys and referenced signed artifacts.
+- [Processor-key generator](https://brian-funk.github.io/masterplanOptimiserV3---Evidence-Public/processor-key/)
+  creates an encrypted Desktop-import package and a public event-processor
+  package. The private key signs Desktop policy, deletion and local-copy
+  receipts only.
+- [Controller-key tool](https://brian-funk.github.io/masterplanOptimiserV3---Evidence-Public/controller-key/)
+  creates controller custody files and signs supported deployment-bound
+  controller statements. It does not sign Server deletion or Desktop evidence.
+
+The root passkey authorises privileged Server actions. The independently
+generated instance key seals the deployment evidence chain. The AGE recovery
+identity decrypts snapshots and is not an evidence-signing key. None of these
+keys is derived from another.
