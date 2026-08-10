@@ -9,7 +9,8 @@
   </head>
   <body>
     <header>
-      <p class="eyebrow">Masterplan Optimiser V3</p>
+      <div class="brand"><img src="mp-opt-mark.svg" width="48" height="48" alt=""><span>Masterplan Optimiser</span></div>
+      <p class="eyebrow">Public evidence tools</p>
       <h1>Accountability evidence</h1>
       <p class="lede">A public description of the portable evidence format, its verification model, and its limits.</p>
     </header>
@@ -26,6 +27,30 @@
           <li>Git may preserve an additional reviewed copy, but it is not the authoritative evidence store.</li>
         </ol>
       </section>
+      <figure class="trust-map" aria-labelledby="trust-map-title">
+        <figcaption><strong id="trust-map-title">Independent trust domains</strong><br><span>Arrows show what each identity signs or authorises. No key is derived from another.</span></figcaption>
+        <div class="trust-grid">
+          <div class="trust-node"><strong>Controller key</strong><span>Controller trust and governance statements</span></div>
+          <div class="trust-arrow" aria-hidden="true">→</div>
+          <div class="trust-node"><strong>Root passkey</strong><span>Exact privileged Server authorisations</span></div>
+          <div class="trust-arrow" aria-hidden="true">→</div>
+          <div class="trust-node"><strong>Instance key</strong><span>Evidence-chain and final-receipt seal</span></div>
+          <div class="trust-node"><strong>Event processor key</strong><span>Desktop policy, deletion and local-copy receipts</span></div>
+          <div class="trust-arrow" aria-hidden="true">→</div>
+          <div class="trust-node"><strong>Evidence bundle</strong><span>Records, detached proofs and public keys</span></div>
+          <div class="trust-arrow" aria-hidden="true">→</div>
+          <div class="trust-node"><strong>Offline verifier</strong><span>Checks exact signatures, digests and chain links</span></div>
+        </div>
+      </figure>
+      <section>
+        <h2>Use a local-only tool</h2>
+        <div class="tool-grid">
+          <a class="tool-card" href="verify-evidence/"><strong>Complete-chain verifier</strong><span>Open an evidence ZIP and verify its chain, public keys and referenced artifacts without uploading it.</span></a>
+          <a class="tool-card" href="processor-key/"><strong>Processor-key generator</strong><span>Create an event-processor public package and encrypted private import for Desktop.</span></a>
+          <a class="tool-card" href="controller-key/"><strong>Controller-key tool</strong><span>Create controller custody files and sign a supported deployment-bound controller statement locally.</span></a>
+        </div>
+        <p class="local-only">These pages use no analytics, remote fonts, CDN code or network API. Private material remains in the current browser session unless you explicitly download it.</p>
+      </section>
       <section>
         <h2>Repository controls</h2>
         <p>Changes require pull requests and Code Owner review. Evidence ingestion may add only one new bundle directory containing <code>evidence.bundle</code> and <code>bundle.sha256</code>. Automated checks verify the complete chain and reject mixed or unexpected ingestion paths.</p>
@@ -36,6 +61,9 @@
       </section>
       <nav aria-label="Documentation links">
         <a href="verification.html">Verification guide</a>
+        <a href="verify-evidence/">Verify a bundle</a>
+        <a href="processor-key/">Processor key</a>
+        <a href="controller-key/">Controller key</a>
         <a href="https://github.com/Brian-Funk/masterplanOptimiserV3---Evidence-Public">Source repository</a>
       </nav>
     </main>

@@ -19,8 +19,19 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+      - name: Install pinned verifier dependency
+        run: python -m pip install cryptography==45.0.6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
       - name: Verify every portable bundle, digest, identity and complete chain
         run: python tools/verify_evidence_repo.py .
+      - name: Verify the local browser verifier against signed synthetic evidence
+        run: python tools/test_browser_verifier.py
+      - name: Verify the client-only processor-key generator
+        run: node tools/test_processor_key_generator.js
+      - name: Verify the client-only controller-key custody tool
+        run: node tools/test_controller_key_custody.js
   ingestion-path-validation:
     name: Ingestion path validation
     if: github.event_name == 'pull_request'
@@ -32,6 +43,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+      - name: Install pinned verifier dependency
+        run: python -m pip install cryptography==45.0.6
       - name: Detect evidence-ingestion changes
         id: ingestion
         shell: bash
